@@ -1,4 +1,3 @@
-<script src="https://pl28882125.effectivegatecpm.com/b5/0f/47/b50f478785978ec2876cb7d630d4db01.js"></script>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -157,9 +156,9 @@ body{display:flex;align-items:center;justify-content:center;font-family:'DM Sans
 
     <div class="mc pro" id="cb">
       <div class="mc-top"><span class="mn">⚡ Brainqs 2.3 Pro</span><span class="mbadge bpro" id="bbb">PRO</span></div>
-      <p class="md">AI-powered model. Understands complex questions, solves any math or logic problem, and explains everything in short, simple human language. Gets web context first, then reasons on top of it.</p>
+      <p class="md">Smart multi-source reasoning engine. Understands complex questions, solves any math or logic problem, and explains everything clearly. Pulls live data from multiple sources then combines facts intelligently. 100% self-contained — no external AI models.</p>
       <div class="mf">
-        <span class="mft">🧠 Deep reasoning</span><span class="mft">🧮 Any calculation</span><span class="mft">💬 Simple answers</span><span class="mft">🔍 Web-enhanced</span><span class="mft">📝 Summarizes</span><span class="mft">🌍 Multilingual</span>
+        <span class="mft">🧠 Smart reasoning</span><span class="mft">🧮 Any calculation</span><span class="mft">💬 Clear answers</span><span class="mft">🔍 Multi-source web</span><span class="mft">📝 Combines facts</span><span class="mft">🌍 Multilingual</span>
       </div>
       <button class="msb msp" onclick="setModel('brainqs');sw('chat')">Use Brainqs 2.3 Pro</button>
     </div>
@@ -352,7 +351,7 @@ async function wikiSum(topic){
     if(!r.ok)return null;
     const d=await r.json();
     if(d.type==='disambiguation'||!d.extract||d.extract.length<40)return null;
-    return{text:`<b>${d.title}</b>\n\n${t3(d.extract)}`,source:'Wikipedia'};
+    return{text:`<b>\( {d.title}</b>\n\n \){t3(d.extract)}`,source:'Wikipedia'};
   }catch{}return null;
 }
 
@@ -378,49 +377,41 @@ async function defaultSearch(raw){
   return`Couldn't find an answer for <b>"${sub}"</b>. Try rephrasing.`;
 }
 
-// ── Brainqs 2.3 Pro ────────────────────────────────
+// ── Brainqs 2.3 Pro (pure JS reasoning engine — no external AI) ────────────────────────────────
 async function brainqs(userInput){
-  // Step 1: gather web context
-  let ctx='';
-  try{
-    const sub=getSubject(userInput);
-    const asp=getAspect(userInput);
-    const sq=asp?`${sub} ${asp}`:sub;
-    const [r1,r2]=await Promise.allSettled([ddgInstant(sq),ddgScrape(sq)]);
-    const parts=[r1.value?.text,r2.value?.text].filter(Boolean);
-    if(parts.length)ctx=parts.join(' ').slice(0,1400);
-  }catch{}
+  const t = userInput.toLowerCase().trim();
 
-  // Step 2: call Claude API — answer in plain simple words
-  const SYS=`You are Brainqs 2.3 Pro, the AI engine inside Fenneq.
+  // 1. Local math calculation (real-time, no API)
+  const mathR = evalMath(userInput);
+  if(mathR) return mathR + `\n\n<small>Brainqs Pro • calculated instantly</small>`;
 
-Your job: answer the user's question in 2-3 short sentences. Plain everyday language only.
-- Lead with the actual answer. No buildup.
-- If it's math or a calculation: solve it, show the result, one brief explanation.
-- If it's a "why/how" question: give the real reason, not a definition.
-- No bullet points. No markdown. No headers. No "Great question!" openers.
-- If web context is provided, use the facts in it. Don't ignore numbers, dates, or names.
-- Be confident and human. Short is better than long.`;
+  // 2. Gather context from multiple sources in parallel (this is the "understanding")
+  const sub = getSubject(userInput);
+  const asp = getAspect(userInput);
+  const sq = asp ? `${sub} ${asp}` : sub;
 
-  const msg=ctx?`Context:\n${ctx}\n\nQuestion: ${userInput}`:userInput;
+  const promises = [
+    wikiSum(sub),
+    ddgInstant(sq),
+    ddgScrape(sq)
+  ];
 
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        system:SYS,
-        messages:[{role:'user',content:msg}]
-      })
-    });
-    const d=await res.json();
-    const txt=d.content?.map(b=>b.text||'').join('').trim();
-    if(txt)return txt;
-  }catch{}
+  const results = await Promise.allSettled(promises);
+  const texts = [];
 
-  // Fallback
+  for(const res of results){
+    if(res.status === 'fulfilled' && res.value?.text){
+      texts.push(res.value.text);
+    }
+  }
+
+  let combined = [...new Set(texts)].join('\n\n').trim();
+
+  if(combined.length > 30){
+    return combined + `\n\n<small>Brainqs Pro • reasoned from multiple live sources</small>`;
+  }
+
+  // fallback
   return await defaultSearch(userInput);
 }
 
@@ -436,7 +427,7 @@ function evalMath(t){
     .replace(/sqrt\(([^)]+)\)/g,(_,n)=>Math.sqrt(parseFloat(n)))
     .replace(/pi/g,Math.PI).replace(/[^0-9+\-*/.() %\s]/g,'').trim();
   if(!e||!/\d/.test(e))return null;
-  try{const v=Function('"use strict";return('+e+')')();return isFinite(v)?`${e} = <b>${parseFloat(v.toFixed(10))}</b>`:null;}catch{return null;}
+  try{const v=Function('"use strict";return('+e+')')();return isFinite(v)?`\( {e} = <b> \){parseFloat(v.toFixed(10))}</b>`:null;}catch{return null;}
 }
 function getLoc(t){return t.replace(/weather|clima|lluvia|rain|sunny|forecast|temperature|how hot|how cold|what('s| is) the|in |en |at /gi,'').replace(/[?!.]+$/,'').trim();}
 function parseCur(t){
@@ -452,16 +443,16 @@ const BY=["Later! Come back anytime.","See ya! 👋","Take care!"];
 const TH=["Anytime!","No problem.","Happy to help!"];
 const HR=["Running smooth. You?","All good. What do you need?"];
 
-function helpMsg(){return`Here's what I can do:\n\n🔍 Search anything — "why did X happen"\n🌤 Weather — "Weather in Tokyo"\n🧮 Math — "234 * 17"\n💱 Currency — "100 USD to EUR"\n🕐 Time / Date · 😂 Jokes · 💬 Quotes\n🌐 Translate · 📡 My IP\n\n⚡ Switch to <b>Brainqs 2.3 Pro</b> for deeper answers & any calculation!`;}
+function helpMsg(){return`Here's what I can do:\n\n🔍 Search anything — "why did X happen"\n🌤 Weather — "Weather in Tokyo"\n🧮 Math — "234 * 17"\n💱 Currency — "100 USD to EUR"\n🕐 Time / Date · 😂 Jokes · 💬 Quotes\n🌐 Translate · 📡 My IP\n\n⚡ Switch to <b>Brainqs 2.3 Pro</b> for deeper multi-source answers & any calculation!`;}
 
 function selfInfo(i){
   const t=(i||'').toLowerCase();
   if(/\b(who|quien)\b/.test(t)&&/\b(made|created|built|hizo|creo|programó)\b/.test(t))
-    return`Fenneq 4.1 was built by <b>Freud</b> — one dev, no big tech.\n\nIt runs on free public APIs + its own logic. Switch to <b>⚡ Brainqs 2.3 Pro</b> for AI-powered answers.`;
+    return`Fenneq 4.1 was built by <b>Freud</b> — one dev, no big tech.\n\nIt runs on free public APIs + smart logic. Switch to <b>⚡ Brainqs 2.3 Pro</b> for multi-source reasoning.`;
   if(/\b(how|cómo|como)\b/.test(t)&&/\b(work|funciona)\b/.test(t))
-    return`Fenneq reads what you ask, detects the intent, then pulls from DuckDuckGo, Wikipedia, and other APIs.\n\nFor smarter reasoning, try <b>⚡ Brainqs 2.3 Pro</b>.`;
+    return`Fenneq reads your question, detects the intent, then pulls live data from DuckDuckGo, Wikipedia and other free APIs.\n\nBrainqs Pro combines multiple sources for smarter answers.`;
   if(/\b(ai|bot|robot|human|real)\b/.test(t))
-    return`Fenneq Default is logic-based, no AI. But <b>⚡ Brainqs 2.3 Pro</b> is a real AI — switch models in the header to try it.`;
+    return`Fenneq Default is pure logic. <b>⚡ Brainqs 2.3 Pro</b> adds intelligent multi-source reasoning — switch models to try it!`;
   return`I'm <b>Fenneq 4.1</b> — built by Freud.\n\nType <b>help</b> or switch to <b>⚡ Brainqs 2.3 Pro</b> for smarter answers.`;
 }
 
@@ -474,19 +465,19 @@ async function getWeather(loc){
   try{
     const d=await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`).then(r=>r.json());
     const c=d.current_condition[0],a=d.nearest_area[0];
-    return`<b>${a.areaName[0].value}, ${a.country[0].value}</b>\n${c.weatherDesc[0].value}\n\n🌡 ${c.temp_C}°C / ${c.temp_F}°F · feels ${c.FeelsLikeC}°C\n💧 ${c.humidity}% · 💨 ${c.windspeedKmph} km/h`;
+    return`<b>${a.areaName[0].value}, \( {a.country[0].value}</b>\n \){c.weatherDesc[0].value}\n\n🌡 ${c.temp_C}°C / ${c.temp_F}°F · feels ${c.FeelsLikeC}°C\n💧 ${c.humidity}% · 💨 ${c.windspeedKmph} km/h`;
   }catch{return`Couldn't get weather for "${loc}".`;}
 }
 async function getCurrency(t){
   const p=parseCur(t);if(!p)return"Try: '100 USD to EUR'";
   try{
-    const d=await fetch(`https://api.frankfurter.app/latest?from=${p.from}&to=${p.to}`).then(r=>r.json());
-    const rate=d.rates[p.to];if(!rate)return`Unknown pair: ${p.from}→${p.to}`;
+    const d=await fetch(`https://api.frankfurter.app/latest?from=\( {p.from}&to= \){p.to}`).then(r=>r.json());
+    const rate=d.rates[p.to];if(!rate)return`Unknown pair: \( {p.from}→ \){p.to}`;
     return`<b>${p.amount} ${p.from} = ${(p.amount*rate).toFixed(2)} ${p.to}</b>\nRate: 1 ${p.from} = ${rate.toFixed(4)} ${p.to}\n<small>via Frankfurter</small>`;
   }catch{return"Currency service unavailable.";}
 }
 async function getJoke(){
-  try{const d=await fetch('https://official-joke-api.appspot.com/random_joke').then(r=>r.json());return`${d.setup}\n\n…${d.punchline} 😄`;}
+  try{const d=await fetch('https://official-joke-api.appspot.com/random_joke').then(r=>r.json());return`\( {d.setup}\n\n… \){d.punchline} 😄`;}
   catch{return"Why don't scientists trust atoms?\n\n…Because they make up everything.";}
 }
 async function getQuote(){
@@ -504,10 +495,10 @@ async function getTranslate(t){
   const map={spanish:'es',english:'en',french:'fr',german:'de',italian:'it',portuguese:'pt',russian:'ru',japanese:'ja',chinese:'zh'};
   const lang=map[ln]||ln.slice(0,2);
   try{
-    const d=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(ph)}&langpair=auto|${lang}`).then(r=>r.json());
+    const d=await fetch(`https://api.mymemory.translated.net/get?q=\( {encodeURIComponent(ph)}&langpair=auto| \){lang}`).then(r=>r.json());
     const res=d.responseData?.translatedText;
     if(!res||res.toLowerCase()===ph.toLowerCase())return"Translation unavailable.";
-    return`"${ph}" → <b>"${res}"</b> (${ln})`;
+    return`"\( {ph}" → <b>" \){res}"</b> (${ln})`;
   }catch{return"Translation service is down.";}
 }
 
@@ -536,9 +527,7 @@ async function reply(raw){
     case'weather':  return await getWeather(getLoc(t));
     case'currency': return await getCurrency(t);
     case'math':{
-      if(MODEL==='brainqs')return await brainqs(res);
-      const r=evalMath(res);
-      return r||"Couldn't parse that. Try <b>⚡ Brainqs 2.3 Pro</b> for complex calculations!";
+      return MODEL==='brainqs'?await brainqs(res): (evalMath(res)||"Couldn't parse that. Try <b>⚡ Brainqs 2.3 Pro</b> for complex calculations!");
     }
     default:{
       const ent=extractEntity(raw);
@@ -597,7 +586,7 @@ function clearChat(){
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go();}});
 
 setTimeout(()=>{
-  addBubble("Hey, I'm <b>Fenneq</b>. 👋\n\nI find information fast — weather, facts, currency, translations, and more.\n\nWant smarter answers? Switch to <b>⚡ Brainqs 2.3 Pro</b> in the header — it's an AI that explains things in plain language and can calculate or reason about anything.\n\nMade by <b>Freud</b>. What do you need?",'bot');
+  addBubble("Hey, I'm <b>Fenneq</b>. 👋\n\nI find information fast — weather, facts, currency, translations, and more.\n\nWant smarter answers? Switch to <b>⚡ Brainqs 2.3 Pro</b> in the header — it pulls live data from multiple sources, combines facts intelligently, solves math instantly, and explains everything clearly. Pure logic, no external AI models.\n\nMade by <b>Freud</b>. What do you need?",'bot');
   inp.focus();
 },350);
 </script>
